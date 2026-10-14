@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pensionpeek"
+name = "planpeek"
 version = "0.1.0"
 description = "Search, inspect, chart, and ask questions about public U.S. Form 5500 filings."
 readme = "README.md"
@@ -27,9 +27,12 @@ dev = [
   "pytest>=8.3,<10",
   "ruff>=0.11,<1",
 ]
+mcp = [
+  "mcp>=1.6,<2",
+]
 
 [tool.hatch.build.targets.wheel]
-packages = ["pensionpeek"]
+packages = ["planpeek"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -41,3 +44,8 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Preserves a real Schedule of Assets page's original PDF column spacing verbatim, so
+# extraction is tested against actual DOL formatting rather than a reflowed fixture.
+"tests/test_schedule_of_assets.py" = ["E501"]

@@ -90,6 +90,20 @@ class TextChunk:
     text: str
 
 
+@dataclass(frozen=True, slots=True)
+class AssetHolding:
+    """One line item from a Form 5500 Schedule of Assets (Held at End of Year).
+
+    `identity` is the combined issuer + fund/investment description text as printed
+    (e.g. "The Vanguard Group, Inc. 500 Index Fund Institutional Select") -- the two
+    aren't split, because PDF text extraction gives no reliable delimiter between them
+    and classification only needs the combined text anyway.
+    """
+
+    identity: str
+    value: float
+
+
 @dataclass(slots=True)
 class FilingMetrics:
     assets_boy: float | None = None
@@ -103,6 +117,7 @@ class FilingMetrics:
     participants_boy: int | None = None
     participants_eoy: int | None = None
     asset_categories: dict[str, float] = field(default_factory=dict)
+    holdings: list[AssetHolding] = field(default_factory=list)
 
     @property
     def net_income(self) -> float | None:
@@ -133,3 +148,69 @@ class RetrievedFiling:
     filename: str
     source_url: str
     was_archive: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class VulFiling:
+    """One SEC EDGAR N-6 (or N-6/A) filing for a variable life separate account."""
+
+    cik: str
+    accession_number: str
+    form_type: str
+    file_date: str
+    display_name: str
+    document_filename: str
+
+    @property
+    def key(self) -> str:
+        return self.accession_number
+
+    @property
+    def accession_no_dashes(self) -> str:
+        return self.accession_number.replace("-", "")
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievedVulDocument:
+    html: str
+    filename: str
+    source_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class SubFund:
+    name: str
+    manager: str | None
+    allocation_weight: float | None
+    expense_ratio: float | None
+    source_section: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AllocationCategory:
+    asset_category: str
+    percentage: float
+    source_section: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VulRiskMetrics:
+    fixed_income_percentage: float | None = None
+    equity_exposure_percentage: float | None = None
+    guaranteed_floor_rate: float | None = None
+    upside_cap_rate: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VulExtraction:
+    """Structured output of the LLM extraction step over one VUL filing."""
+
+    policy_investment_type: str
+    carrier_name: str | None
+    reporting_year: int | None
+    allocation_chart: list[AllocationCategory] = field(default_factory=list)
+    unclassified_percentage: float = 0.0
+    unclassified_reason: str | None = None
+    risk_metrics: VulRiskMetrics = field(default_factory=VulRiskMetrics)
+    sub_funds_list: list[SubFund] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)

@@ -4,8 +4,9 @@ import io
 import re
 from collections.abc import Iterable
 
-from pensionpeek.context import contains_mask_artifact, sanitize_filing_context
-from pensionpeek.models import FilingMetrics, ParsedFiling, TextChunk
+from planpeek.context import contains_mask_artifact, sanitize_filing_context
+from planpeek.models import FilingMetrics, ParsedFiling, TextChunk
+from planpeek.schedule_of_assets import extract_holdings
 
 
 class ParsingError(RuntimeError):
@@ -314,6 +315,9 @@ def parse_pdf(pdf_bytes: bytes) -> ParsedFiling:
             "Financial totals could not be read confidently from the PDF layout; use the source "
             "pages to verify values."
         )
+    holdings, holdings_warnings = extract_holdings(full_text)
+    metrics.holdings = holdings
+    warnings.extend(holdings_warnings)
     return ParsedFiling(
         pages=pages,
         chunks=chunk_pages(pages),

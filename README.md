@@ -1,6 +1,6 @@
-# PensionPeek
+# PlanPeek
 
-PensionPeek is a Streamlit application for finding public U.S. Form 5500 filings, reading the
+PlanPeek is a Streamlit application for finding public U.S. Form 5500 filings, reading the
 actual filing PDF, charting reported plan-level figures, and asking grounded follow-up questions
 through a session-scoped RAG pipeline.
 
@@ -24,6 +24,7 @@ Model Serving can be used for the chat and embedding models.
 - Page citations and supporting retrieved excerpts with every chat answer
 - Known EFAST mask and numeric-sentinel artifacts removed before embedding and answering
 - Plain-language definitions and prominent aggregate-data disclaimers
+- An MCP server exposing search, retrieval, and grounded Q&A to any MCP client
 
 ## Filing retrieval finding
 
@@ -36,7 +37,7 @@ https://efast2-filings-public.s3.amazonaws.com/prd
 
 The UI's download handler opens that base plus the search API's `pdfpath`. A live sample returned
 an actual `%PDF-1.7` document even though its content type was `application/octet-stream`. This
-differs from older DOL help language describing a ZIP download. PensionPeek therefore:
+differs from older DOL help language describing a ZIP download. PlanPeek therefore:
 
 1. tries the current DOL-owned S3 path;
 2. identifies content by file signature rather than HTTP content type;
@@ -76,7 +77,7 @@ export EMBEDDING_MODEL="databricks-qwen3-embedding-0-6b"
 export LLM_MODEL="databricks-claude-haiku-4-5"
 ```
 
-PensionPeek uses the profile's refreshable OAuth session, so a personal access token is not
+PlanPeek uses the profile's refreshable OAuth session, so a personal access token is not
 required. Authenticate the profile once (and repeat when Databricks asks you to sign in again):
 
 ```bash
@@ -97,12 +98,48 @@ embedded without an instruction; Qwen question embeddings receive a retrieval-sp
 as recommended for that model. Both chunks and retrieved excerpts are sent to the configured
 Databricks workspace.
 
+## MCP server
+
+PlanPeek's search, retrieval, and Q&A capabilities are also exposed as an MCP server, so any
+MCP client (Claude Code, Claude Desktop, etc.) can look up filings and ask questions about them
+directly — the same EFAST2 data and RAG pipeline as the Streamlit app, without the UI.
+
+```bash
+uv sync --extra mcp
+uv run python -m planpeek.mcp_server
+```
+
+Register it with Claude Code:
+
+```bash
+claude mcp add planpeek -- uv run --directory "$(pwd)" python -m planpeek.mcp_server
+```
+
+Tools:
+
+| Tool | Try asking |
+|---|---|
+| `search_filings(query, search_by)` | "Find Google's 401(k) Form 5500 filings" |
+| `get_filing_history(ein, plan_number)` | "Show the filing history for EIN 77-0493581 plan 001" |
+| `get_filing_financials(filing_id)` | "What are the Schedule H totals for that filing?" |
+| `ask_filing(filing_id, question)` | "Ask that filing what its reported asset categories are" |
+
+A filing is addressed by the short `filing_id` returned from `search_filings` or
+`get_filing_history` — a client never handles a PDF or a vector store directly. `ask_filing`
+requires the same Databricks credentials as the Streamlit app (see below); `search_filings`,
+`get_filing_history`, and `get_filing_financials` work without one. Two resources
+(`config://glossary` and the templated `docs://glossary/{term}`) expose the plain-language
+glossary for clients that want definitions rather than a tool call.
+
+The server process caches parsed filings and RAG engines in memory for its lifetime (bounded to
+the 10 most recently used filings), the same session-scoped model the Streamlit app uses.
+
 ## Verify
 
 ```bash
-uv run pytest
+uv run pytest                       # add --extra mcp during `uv sync` to include MCP server tests
 uv run ruff check .
-python -m compileall app.py pensionpeek tests
+python -m compileall app.py planpeek tests
 ```
 
 ## Architecture
@@ -130,6 +167,10 @@ released when the filing changes. It is local and session-scoped, not hosted or 
 embeddings transmit extracted filing chunks to the configured workspace, and the retrieved excerpts
 needed to answer a question are sent to its configured answering model.
 
+`planpeek/mcp_server.py` is a second consumer of this same pipeline: it wraps `efast`,
+`retrieval`, `parser`, and `rag` in four intent-shaped MCP tools instead of a Streamlit UI, so the
+search index, parsing heuristics, and RAG engine have exactly one implementation each.
+
 ## Known limitations
 
 - PDF forms are visually structured, and text extraction order varies. Displayed parsed totals are
@@ -138,7 +179,7 @@ needed to answer a question are sent to its configured answering model.
 - EFAST does not publicly disclose every filing. Older, foreign, one-participant, superseded, or
   sensitive filings may be unavailable.
 - Search metadata exposes beginning-of-year participant counts broadly. End-of-year counts are
-  charted only when the selected PDF yields one; PensionPeek does not invent missing values.
+  charted only when the selected PDF yields one; PlanPeek does not invent missing values.
 - Reported asset categories are aggregate plan categories. They are never personal allocations.
 - Investment-by-investment detail depends on whether the filing has a public Schedule of Assets.
 - Unrecognized PDF extraction artifacts can still occur; verify material values on the source pages.
@@ -153,5 +194,5 @@ and contact information.
 - [EFAST2 search help](https://www.efast.dol.gov/5500Search/help/help.html)
 - [DOL Form 5500 datasets](https://www.dol.gov/agencies/ebsa/about-ebsa/our-activities/public-disclosure/foia/form-5500-datasets)
 
-PensionPeek is an independent research interface and is not affiliated with or endorsed by the
+PlanPeek is an independent research interface and is not affiliated with or endorsed by the
 U.S. Department of Labor. It does not provide legal, tax, investment, or fiduciary advice.
